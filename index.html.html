@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>March Madness Pool Scorer</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --orange:#F05A28; --navy:#0A1628; --cream:#FAF6F0;
+    --gold:#E8C547; --mid:#1E2D4A; --green:#2ECC71;
+    --red:#E74C3C; --blue:#3498DB; --gray:#6B82A0;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:var(--navy);min-height:100vh;font-family:'DM Sans',sans-serif;color:var(--cream);padding:30px 16px 60px;}
+  header{text-align:center;margin-bottom:24px;}
+  .year-badge{display:inline-block;background:var(--orange);color:white;font-size:11px;letter-spacing:3px;text-transform:uppercase;padding:5px 14px;border-radius:20px;margin-bottom:10px;}
+  h1{font-family:'Bebas Neue',sans-serif;font-size:clamp(42px,9vw,78px);letter-spacing:3px;line-height:0.95;}
+  h1 span{color:var(--orange);}
+  .subtitle{color:var(--gray);font-size:13px;letter-spacing:2px;text-transform:uppercase;margin-top:8px;}
+  .scoreboard{display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:700px;margin:0 auto 16px;}
+  .score-card{background:var(--mid);border-radius:16px;padding:20px 24px;text-align:center;border:2px solid transparent;transition:border 0.3s;}
+  .score-card.leading{border-color:var(--gold);}
+  .player-name{font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:2px;color:var(--gold);margin-bottom:4px;}
+  .actual-score{font-size:48px;font-weight:600;line-height:1;margin-bottom:4px;}
+  .projected-score{font-size:13px;color:var(--gray);}
+  .projected-score span{color:var(--blue);font-weight:500;}
+  .leading-badge{display:inline-block;background:var(--gold);color:var(--navy);font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;padding:2px 10px;border-radius:10px;margin-top:6px;}
+  #banner{max-width:700px;margin:0 auto 14px;}
+  .banner-inner{background:var(--mid);border-radius:14px;padding:14px 24px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;}
+  .banner-lead{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:2px;color:var(--gold);}
+  .banner-diff{color:var(--cream);font-size:14px;font-weight:600;margin-left:10px;}
+  .banner-proj{font-size:12px;color:var(--gray);text-align:right;}
+  .banner-proj span{color:var(--blue);font-weight:600;}
+  .status-row{max-width:700px;margin:0 auto 14px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;}
+  .status-pill{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.05);border-radius:10px;padding:8px 14px;font-size:12px;color:var(--gray);}
+  .status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+  .dot-live{background:var(--green);animation:pulse 1.5s infinite;}
+  .dot-done{background:var(--gray);}
+  .dot-wait{background:var(--gold);}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+  .refresh-btn{background:var(--orange);color:white;border:none;padding:9px 18px;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:opacity 0.2s;display:flex;align-items:center;gap:8px;}
+  .refresh-btn:hover{opacity:0.85;}
+  .refresh-btn:disabled{opacity:0.5;cursor:not-allowed;}
+  .spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:white;border-radius:50%;animation:spin 0.7s linear infinite;display:none;}
+  .refresh-btn.loading .spinner{display:block;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .tabs{max-width:700px;margin:0 auto 16px;display:flex;gap:8px;}
+  .tab{background:var(--mid);color:var(--gray);border:none;padding:8px 18px;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all 0.2s;}
+  .tab.active{background:var(--orange);color:white;}
+  .pick-table{background:var(--mid);border-radius:16px;overflow:hidden;max-width:700px;margin:0 auto 20px;}
+  .table-header{display:grid;grid-template-columns:28px 1fr 86px 66px 1fr 86px 66px;background:var(--navy);border-bottom:2px solid var(--orange);padding:11px 14px;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gray);gap:5px;align-items:center;}
+  .col-name{font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:2px;color:var(--gold);}
+  .pick-row{display:grid;grid-template-columns:28px 1fr 86px 66px 1fr 86px 66px;padding:9px 14px;border-bottom:1px solid rgba(255,255,255,0.05);align-items:center;gap:5px;font-size:13px;}
+  .pick-row:last-child{border-bottom:none;}
+  .pick-row:hover{background:rgba(255,255,255,0.03);}
+  .pick-row.dbl{background:rgba(232,197,71,0.04);}
+  .divider-row{background:rgba(255,255,255,0.03);padding:5px 14px;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gray);border-bottom:1px solid rgba(255,255,255,0.05);}
+  .snum{font-family:'Bebas Neue',sans-serif;font-size:14px;color:var(--orange);opacity:0.6;}
+  .dbl .snum{color:var(--gold);opacity:1;}
+  .tname{font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .badge{font-size:10px;font-weight:500;padding:2px 6px;border-radius:5px;text-align:center;white-space:nowrap;}
+  .b-champion{background:rgba(232,197,71,0.2);color:var(--gold);}
+  .b-runnerup{background:rgba(232,197,71,0.12);color:var(--gold);}
+  .b-final4{background:rgba(52,152,219,0.15);color:var(--blue);}
+  .b-elite8{background:rgba(52,152,219,0.1);color:#7fb3d3;}
+  .b-sweet16{background:rgba(52,152,219,0.08);color:#7fb3d3;}
+  .b-r2{background:rgba(107,130,160,0.15);color:var(--gray);}
+  .b-r1{background:rgba(231,76,60,0.15);color:var(--red);}
+  .b-alive{background:rgba(46,204,113,0.15);color:var(--green);}
+  .b-pending{background:rgba(255,255,255,0.06);color:var(--gray);}
+  .pts{text-align:right;font-weight:600;font-size:13px;}
+  .pp{color:var(--green);}.pn{color:var(--red);}.pz{color:var(--gray);}
+  .pproj{color:var(--blue);font-size:10px;display:block;font-weight:400;}
+  .scoring-key{max-width:700px;margin:0 auto;background:var(--mid);border-radius:16px;padding:20px 24px;}
+  .scoring-key h3{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:2px;color:var(--gold);margin-bottom:14px;}
+  .key-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;font-size:13px;}
+  .key-row{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05);}
+  .kv{font-weight:600;color:var(--gold);}
+  .key-note{font-size:11px;color:var(--gray);margin-top:10px;grid-column:1/-1;}
+  @media(max-width:500px){
+    .table-header,.pick-row{grid-template-columns:22px 1fr 72px 54px 1fr 72px 54px;font-size:11px;padding:7px 9px;gap:3px;}
+    .actual-score{font-size:36px;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="year-badge">2026 Tournament</div>
+  <h1>MARCH<br><span>MADNESS</span></h1>
+  <p class="subtitle">Live Pool Scorer</p>
+</header>
+
+<div class="scoreboard">
+  <div class="score-card" id="ken-card">
+    <div class="player-name">Ken</div>
+    <div class="actual-score" id="ken-actual">—</div>
+    <div class="projected-score">Projected: <span id="ken-proj">—</span></div>
+  </div>
+  <div class="score-card" id="dan-card">
+    <div class="player-name">Dan</div>
+    <div class="actual-score" id="dan-actual">—</div>
+    <div class="projected-score">Projected: <span id="dan-proj">—</span></div>
+  </div>
+</div>
+
+<div id="banner"></div>
+
+<div class="status-row">
+  <div class="status-pill">
+    <div class="status-dot dot-wait" id="status-dot"></div>
+    <span id="status-text">Loading scores…</span>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <span style="font-size:11px;color:var(--gray)" id="last-updated"></span>
+    <button class="refresh-btn" id="refresh-btn" onclick="loadScores()">
+      <div class="spinner"></div>
+      <span id="btn-text">↻ Refresh</span>
+    </button>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('picks')">Picks &amp; Scores</button>
+  <button class="tab" onclick="switchTab('key')">Scoring Rules</button>
+</div>
+
+<div id="tab-picks"><div id="table-area"></div></div>
+<div id="tab-key" style="display:none">
+  <div class="scoring-key">
+    <h3>Scoring Rules</h3>
+    <div class="key-grid">
+      <div>
+        <div class="key-row"><span>Win Tournament</span><span class="kv">800 pts</span></div>
+        <div class="key-row"><span>Runner-Up</span><span class="kv">400 pts</span></div>
+        <div class="key-row"><span>Final Four loss</span><span class="kv">200 pts</span></div>
+        <div class="key-row"><span>Elite Eight loss</span><span class="kv">100 pts</span></div>
+        <div class="key-row"><span>Sweet 16 loss</span><span class="kv">50 pts</span></div>
+      </div>
+      <div>
+        <div class="key-row"><span>Picks 11–15</span><span class="kv">2× all above</span></div>
+        <div class="key-row"><span>Picks 1–5: lose R1</span><span class="kv" style="color:var(--red)">−50 pts</span></div>
+        <div class="key-row"><span>Picks 1–5: lose R2</span><span class="kv" style="color:var(--red)">−25 pts</span></div>
+      </div>
+      <p class="key-note">★ Picks 11–15 earn double points. Penalties only apply to picks 1–5 for R1/R2 losses.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── PICKS ─────────────────────────────────────────────────────────────────────
+const PICKS = {
+  ken: [
+    {slot:1,  team:"Michigan",   abbr:"MICH"},
+    {slot:2,  team:"Florida",    abbr:"FLA"},
+    {slot:3,  team:"Iowa St.",   abbr:"ISU"},
+    {slot:4,  team:"MSU",        abbr:"MSU"},
+    {slot:5,  team:"UConn",      abbr:"CONN"},
+    {slot:6,  team:"Virginia",   abbr:"UVA"},
+    {slot:7,  team:"Wisconsin",  abbr:"WIS"},
+    {slot:8,  team:"St. John's", abbr:"SJU"},
+    {slot:9,  team:"Vandy",      abbr:"VAN"},
+    {slot:10, team:"BYU",        abbr:"BYU"},
+    {slot:11, team:"Texas Tech", abbr:"TTU"},
+    {slot:12, team:"Louisville", abbr:"LOU"},
+    {slot:13, team:"Tennessee",  abbr:"TENN"},
+    {slot:14, team:"UNC",        abbr:"UNC"},
+    {slot:15, team:"Kentucky",   abbr:"UK"},
+  ],
+  dan: [
+    {slot:1,  team:"Duke",       abbr:"DUKE"},
+    {slot:2,  team:"Arizona",    abbr:"ARIZ"},
+    {slot:3,  team:"Houston",    abbr:"HOU"},
+    {slot:4,  team:"Illinois",   abbr:"ILL"},
+    {slot:5,  team:"Purdue",     abbr:"PUR"},
+    {slot:6,  team:"Gonzaga",    abbr:"GONZ"},
+    {slot:7,  team:"Nebraska",   abbr:"NEB"},
+    {slot:8,  team:"UCLA",       abbr:"UCLA"},
+    {slot:9,  team:"Alabama",    abbr:"ALA"},
+    {slot:10, team:"Arkansas",   abbr:"ARK"},
+    {slot:11, team:"Kansas",     abbr:"KU"},
+    {slot:12, team:"St. Mary's", abbr:"SMC"},
+    {slot:13, team:"Miami FL",   abbr:"MIA"},
+    {slot:14, team:"Ohio St.",   abbr:"OSU"},
+    {slot:15, team:"Miami OH",   abbr:"MIOH"},
+  ]
+};
+
+// ── ODDS ──────────────────────────────────────────────────────────────────────
+function ml(o){return o<0?(-o)/(-o+100):100/(o+100);}
+const ODDS={DUKE:0.2222,MICH:0.2128,ARIZ:0.2000,FLA:0.1176,HOU:0.0909,CONN:0.0556,ILL:0.0435,ISU:0.0526,PUR:0.0278,MSU:0.0244,KU:0.0196,ARK:0.0196,SJU:0.0196,GONZ:0.0179,UVA:0.0164,VAN:0.0152,WIS:0.0141,TENN:0.0110,NEB:0.0099,UK:0.0099,ALA:0.0099,UNC:0.0090,TTU:0.0090,LOU:0.0062,BYU:0.0076,UCLA:0.0076,SMC:0.0040,OSU:0.0040,MIA:0.0040,MIOH:0.0010};
+const S16={MICH:ml(-800),DUKE:ml(-700),ARIZ:ml(-600),FLA:ml(-425),PUR:ml(-375),ILL:ml(-350),ISU:ml(-300),HOU:ml(-275),GONZ:ml(-235),CONN:ml(-190),ARK:ml(-145),MSU:ml(-135),ALA:ml(-130),SJU:ml(-115),UVA:ml(-115),VAN:ml(-110),TENN:ml(120),KU:ml(125),NEB:ml(130),TTU:ml(160),WIS:ml(160),LOU:ml(190),UCLA:ml(210),SMC:ml(260),BYU:ml(425),UNC:ml(450),UK:ml(475),MIA:ml(525),OSU:ml(1000),MIOH:ml(8000)};
+const R1={MICH:ml(-20000),FLA:ml(-5000),ISU:ml(-3500),MSU:ml(-1800),CONN:ml(-3500),UVA:ml(-700),WIS:ml(-700),SJU:ml(-600),VAN:ml(-700),BYU:ml(-148),TTU:ml(-700),LOU:ml(-162),TENN:ml(-700),UNC:ml(-142),UK:ml(-162),DUKE:ml(-20000),ARIZ:ml(-5000),HOU:ml(-8000),ILL:ml(-5000),PUR:ml(-5000),GONZ:ml(-3200),NEB:ml(-500),UCLA:ml(-500),ALA:ml(-700),ARK:ml(-1450),KU:ml(-700),SMC:ml(-162),MIA:ml(-500),OSU:ml(-142),MIOH:ml(250)};
+
+// ── SCORING ───────────────────────────────────────────────────────────────────
+const ROUND_PTS={champion:800,runnerup:400,final4:200,elite8:100,sweet16:50,r2:0,r1:0};
+function pts(result,slot){
+  const m=slot>=11?2:1;let p=(ROUND_PTS[result]||0)*m;
+  if(slot<=5){if(result==='r1')p-=50;if(result==='r2')p-=25;}
+  return p;
+}
+function projected(result,slot,abbr){
+  if(result!=='alive'&&result!=='pending')return pts(result,slot);
+  const m=slot>=11?2:1,c=ODDS[abbr]||0.005;
+  const wins=teamWins[abbr]||0;
+
+  // Use pre-tournament S16/R1 odds for teams that haven't played yet (pending)
+  // For teams already alive (won 1+ games), update to conditional probabilities:
+  // P(reach round X | already won N games) = P(reach X) / P(win N games)
+  // We anchor on the known sportsbook probabilities and scale forward.
+
+  let pS16, pE8, pF4, pFinal, pChamp=c;
+  const pS16_pre = S16[abbr] ?? Math.pow(c,2/6);
+
+  if(wins===0){
+    // Pre-tournament: use raw sportsbook odds, no update needed
+    const pR1=R1[abbr]??Math.pow(c,1/6);
+    pS16=pS16_pre;
+    pE8=Math.sqrt(pS16*c);
+    pF4=Math.pow(c,4/6);
+    pFinal=Math.pow(c,5/6);
+    const exp=((pS16-pE8)*50+(pE8-pF4)*100+(pF4-pFinal)*200+(pFinal-c)*400+c*800)*m;
+    const penalty=slot<=5?(1-pR1)*(-50)+Math.max(0,pR1-pS16)*(-25):0;
+    return Math.round(exp+penalty);
+  }
+
+  // Team has won games — update conditionally.
+  // P(reach round | survived to here) = P(reach round) / P(survived to here)
+  // "Survived to here" means won `wins` games already.
+  // We use the geometric model P(win k games) = c^(k/6) as the baseline,
+  // but anchor the S16 probability to the real sportsbook number.
+
+  // Map wins to the probability of having reached this point
+  // wins=1: survived R1. Use pR1_pre as anchor.
+  // wins=2: reached S16. Use pS16_pre as anchor.
+  // wins=3+: use geometric from champ odds
+
+  const pR1_pre = R1[abbr] ?? Math.pow(c,1/6);
+  let pSurvivedToHere;
+  if(wins===1) pSurvivedToHere = pR1_pre;
+  else if(wins===2) pSurvivedToHere = pS16_pre;
+  else pSurvivedToHere = Math.pow(c, wins/6);
+
+  // Conditional probabilities: divide future round probs by current survival prob
+  const pS16_raw = wins>=2 ? 1.0 : pS16_pre;  // already in S16 if wins>=2
+  const pE8_raw  = wins>=3 ? 1.0 : Math.sqrt(pS16_pre*c);
+  const pF4_raw  = wins>=4 ? 1.0 : Math.pow(c,4/6);
+  const pFinal_raw=wins>=5 ? 1.0 : Math.pow(c,5/6);
+
+  // Conditional = raw / pSurvivedToHere, capped at 1
+  pS16  = wins>=2 ? 1.0 : Math.min(pS16_raw/pSurvivedToHere, 1.0);
+  pE8   = wins>=3 ? 1.0 : Math.min(pE8_raw/pSurvivedToHere, 1.0);
+  pF4   = wins>=4 ? 1.0 : Math.min(pF4_raw/pSurvivedToHere, 1.0);
+  pFinal= wins>=5 ? 1.0 : Math.min(pFinal_raw/pSurvivedToHere, 1.0);
+  pChamp= Math.min(c/pSurvivedToHere, 1.0);
+
+  // Points already locked in from wins so far (no points for winning R1/R2, only for losing in later rounds)
+  // Expected future points from here
+  const futureS16  = wins<2 ? (pS16-pE8)*50   : 0; // can still lose in S16 if wins<2
+  const futureE8   = wins<3 ? (pE8-pF4)*100  : 0;
+  const futureF4   = wins<4 ? (pF4-pFinal)*200: 0;
+  const futureFinal= wins<5 ? (pFinal-pChamp)*400: 0;
+  const futureChamp= pChamp*800;
+
+  const exp=(futureS16+futureE8+futureF4+futureFinal+futureChamp)*m;
+
+  // Penalty: only applies to picks 1-5, and only if they haven't cleared R2 yet
+  // If wins>=2 they've cleared R2, no more penalty risk
+  let penalty=0;
+  if(slot<=5&&wins===0){
+    penalty=(1-pR1_pre)*(-50)+Math.max(0,pR1_pre-pS16_pre)*(-25);
+  } else if(slot<=5&&wins===1){
+    // Survived R1, might still lose R2 — penalty for R2 loss already partially avoided
+    // Conditional P(lose R2 | won R1) = P(lose R2) / P(won R1) = (pR1-pS16)/pR1
+    const pLoseR2Given1Win = Math.max(0,(pR1_pre-pS16_pre)/pR1_pre);
+    penalty = pLoseR2Given1Win * (-25);
+  }
+
+  return Math.round(exp+penalty);
+}
+
+// ── RESULTS STATE ─────────────────────────────────────────────────────────────
+let teamWins={},teamElim={},teamAlive={};
+const ALIAS={'M-OH':'MIOH','UCONN':'CONN'};
+function norm(a){const u=(a||'').toUpperCase();return ALIAS[u]||u;}
+function roundFromWins(w){return['r1','r2','sweet16','elite8','final4','runnerup','champion'][Math.min(w,6)];}
+
+function getResult(abbr){
+  if(teamElim[abbr])return teamElim[abbr];
+  if(teamAlive[abbr])return'alive';
+  return'pending';
+}
+
+// ── ESPN API — works from any real hosting (Vercel, GitHub Pages, etc.) ───────
+const TOURNEY_DATES = [
+  '20260318','20260319','20260320','20260321',
+  '20260322','20260323',
+  '20260327','20260328','20260329','20260330',
+  '20260404','20260405','20260407'
+];
+
+const ESPN_ALIAS = {'M-OH':'MIOH','UCONN':'CONN'};
+function normEspn(a){const u=(a||'').toUpperCase();return ESPN_ALIAS[u]||ALIAS[u]||u;}
+
+function roundFromWins(w){return['r1','r2','sweet16','elite8','final4','runnerup','champion'][Math.min(w,6)];}
+
+function processEspnEvents(events){
+  for(const e of events){
+    const comp=e.competitions?.[0];
+    if(!comp)continue;
+    const home=comp.competitors?.find(c=>c.homeAway==='home');
+    const away=comp.competitors?.find(c=>c.homeAway==='away');
+    if(!home||!away)continue;
+    const status=e.status?.type?.name||'';
+    if(status!=='STATUS_FINAL')continue;
+    const hA=normEspn(home.team?.abbreviation);
+    const aA=normEspn(away.team?.abbreviation);
+    const hS=parseInt(home.score||0);
+    const aS=parseInt(away.score||0);
+    if(!hS&&!aS)continue;
+    const winner=hS>aS?hA:aA, loser=hS>aS?aA:hA;
+    const lw=teamWins[loser]||0;
+    teamElim[loser]=roundFromWins(lw);
+    teamWins[winner]=(teamWins[winner]||0)+1;
+    teamAlive[winner]=true;
+    delete teamAlive[loser];
+  }
+  for(const[a,w]of Object.entries(teamWins)){
+    if(w>=6){teamElim[a]='champion';delete teamAlive[a];}
+  }
+}
+
+async function loadScores(){
+  const btn=document.getElementById('refresh-btn');
+  btn.classList.add('loading');
+  btn.disabled=true;
+  document.getElementById('btn-text').textContent='Loading…';
+  setStatus('wait','Fetching scores…');
+
+  teamWins={};teamElim={};teamAlive={};
+
+  try{
+    const results = await Promise.allSettled(
+      TOURNEY_DATES.map(d =>
+        fetch(`https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=${d}&groups=100&limit=50`)
+          .then(r=>r.ok?r.json():null)
+      )
+    );
+
+    let totalClosed=0, totalLive=0;
+    for(const r of results){
+      if(r.status!=='fulfilled'||!r.value)continue;
+      const events=r.value.events||[];
+      totalClosed+=events.filter(e=>e.status?.type?.name==='STATUS_FINAL').length;
+      totalLive+=events.filter(e=>e.status?.type?.name==='STATUS_IN_PROGRESS').length;
+      processEspnEvents(events);
+    }
+
+    if(totalLive>0) setStatus('live',`${totalLive} game(s) live · ${totalClosed} completed`);
+    else if(totalClosed>0) setStatus('done',`${totalClosed} games completed`);
+    else setStatus('wait','No completed games yet');
+
+  }catch(err){
+    console.error(err);
+    setStatus('wait','Error loading scores — try refreshing');
+  }
+
+  render();
+  document.getElementById('last-updated').textContent='Updated '+new Date().toLocaleTimeString();
+  btn.classList.remove('loading');
+  btn.disabled=false;
+  document.getElementById('btn-text').textContent='↻ Refresh';
+}
+
+// ── RENDER ────────────────────────────────────────────────────────────────────
+const LABELS={champion:'🏆 Champion',runnerup:'🥈 Runner-Up',final4:'Final Four',elite8:'Elite Eight',sweet16:'Sweet 16',r2:'Lost R2',r1:'Lost R1',alive:'✓ Alive',pending:'Pending'};
+const BCLS={champion:'b-champion',runnerup:'b-runnerup',final4:'b-final4',elite8:'b-elite8',sweet16:'b-sweet16',r2:'b-r2',r1:'b-r1',alive:'b-alive',pending:'b-pending'};
+
+function render(){
+  let kT=0,dT=0,kP=0,dP=0,rows='';
+  for(let i=0;i<15;i++){
+    if(i===0)rows+=`<div class="divider-row">Picks 1–10 · Standard scoring · Penalty on picks 1–5</div>`;
+    if(i===10)rows+=`<div class="divider-row">Picks 11–15 · Double points ★</div>`;
+    const kp=PICKS.ken[i],dp=PICKS.dan[i];
+    const kr=getResult(kp.abbr),dr=getResult(dp.abbr);
+    const kpts=pts(kr,kp.slot),dpts=pts(dr,dp.slot);
+    const kproj=projected(kr,kp.slot,kp.abbr),dproj=projected(dr,dp.slot,dp.abbr);
+    kT+=kpts;dT+=dpts;kP+=kproj;dP+=dproj;
+    const dc=kp.slot>=11?'dbl':'';
+    const kph=['alive','pending'].includes(kr)?`<span class="pproj">proj +${kproj}</span>`:'';
+    const dph=['alive','pending'].includes(dr)?`<span class="pproj">proj +${dproj}</span>`:'';
+    rows+=`<div class="pick-row ${dc}">
+      <span class="snum">${String(kp.slot).padStart(2,'0')}</span>
+      <span class="tname">${kp.team}</span>
+      <span class="badge ${BCLS[kr]}">${LABELS[kr]}</span>
+      <span class="pts ${kpts>0?'pp':kpts<0?'pn':'pz'}">${kpts>=0?'+':''}${kpts}${kph}</span>
+      <span class="tname">${dp.team}</span>
+      <span class="badge ${BCLS[dr]}">${LABELS[dr]}</span>
+      <span class="pts ${dpts>0?'pp':dpts<0?'pn':'pz'}">${dpts>=0?'+':''}${dpts}${dph}</span>
+    </div>`;
+  }
+  document.getElementById('table-area').innerHTML=`<div class="pick-table">
+    <div class="table-header"><span>#</span><span class="col-name">Ken</span><span>Result</span><span style="text-align:right">Pts</span><span class="col-name">Dan</span><span>Result</span><span style="text-align:right">Pts</span></div>
+    ${rows}</div>`;
+
+  document.getElementById('ken-actual').textContent=(kT>=0?'+':'')+kT;
+  document.getElementById('dan-actual').textContent=(dT>=0?'+':'')+dT;
+  document.getElementById('ken-proj').textContent='+'+kP;
+  document.getElementById('dan-proj').textContent='+'+dP;
+
+  ['ken','dan'].forEach(p=>{
+    const c=document.getElementById(`${p}-card`);
+    c.classList.remove('leading');c.querySelector('.leading-badge')?.remove();
+  });
+  const leader=kT>dT?'ken':dT>kT?'dan':null;
+  if(leader){const c=document.getElementById(`${leader}-card`);c.classList.add('leading');const b=document.createElement('div');b.className='leading-badge';b.textContent='★ Leading';c.appendChild(b);}
+
+  const diff=Math.abs(kT-dT),projDiff=Math.abs(kP-dP),projLeader=kP>=dP?'Ken':'Dan';
+  document.getElementById('banner').innerHTML=leader
+    ?`<div class="banner-inner"><div><span class="banner-lead">${leader==='ken'?'Ken':'Dan'} leads</span><span class="banner-diff">by +${diff} pts</span></div><div class="banner-proj">Proj: <span>${projLeader} +${projDiff} ahead</span><br><span style="opacity:0.7">Ken +${kP} · Dan +${dP}</span></div></div>`
+    :`<div class="banner-inner" style="justify-content:space-between"><span class="banner-lead" style="color:var(--cream)">Tied — 0 pts</span><div class="banner-proj">Proj: <span>${projLeader} +${projDiff} ahead</span><br><span style="opacity:0.7">Ken +${kP} · Dan +${dP}</span></div></div>`;
+}
+
+function setStatus(type,msg){
+  document.getElementById('status-dot').className='status-dot '+(type==='live'?'dot-live':type==='done'?'dot-done':'dot-wait');
+  document.getElementById('status-text').textContent=msg;
+}
+function switchTab(tab){
+  document.getElementById('tab-picks').style.display=tab==='picks'?'':'none';
+  document.getElementById('tab-key').style.display=tab==='key'?'':'none';
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',(i===0&&tab==='picks')||(i===1&&tab==='key')));
+}
+
+render();
+loadScores();
+</script>
+</body>
+</html>
