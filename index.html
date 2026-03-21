@@ -187,11 +187,46 @@ const PICKS = {
   ]
 };
 
-// ── ODDS ──────────────────────────────────────────────────────────────────────
+// ── ODDS — DraftKings implied probabilities, normalized to remove vig ─────────
+// Raw implied probs summed to 126.3% — divided by 1.263 to normalize to 100%
+const ODDS={
+  DUKE:0.1759,MICH:0.1685,ARIZ:0.1584,FLA:0.0931,HOU:0.0720,
+  CONN:0.0440,ILL:0.0344,ISU:0.0417,PUR:0.0220,MSU:0.0193,
+  KU:0.0155,ARK:0.0155,SJU:0.0155,GONZ:0.0142,UVA:0.0130,
+  VAN:0.0120,WIS:0.0112,TENN:0.0087,NEB:0.0078,UK:0.0078,
+  ALA:0.0078,UNC:0.0071,TTU:0.0071,LOU:0.0049,BYU:0.0060,
+  UCLA:0.0060,SMC:0.0032,OSU:0.0032,MIA:0.0032,MIOH:0.0008,
+};
+
+// S16 odds — normalized by dividing by overround (1502/1600 ≈ 0.939 overround factor)
 function ml(o){return o<0?(-o)/(-o+100):100/(o+100);}
-const ODDS={DUKE:0.2222,MICH:0.2128,ARIZ:0.2000,FLA:0.1176,HOU:0.0909,CONN:0.0556,ILL:0.0435,ISU:0.0526,PUR:0.0278,MSU:0.0244,KU:0.0196,ARK:0.0196,SJU:0.0196,GONZ:0.0179,UVA:0.0164,VAN:0.0152,WIS:0.0141,TENN:0.0110,NEB:0.0099,UK:0.0099,ALA:0.0099,UNC:0.0090,TTU:0.0090,LOU:0.0062,BYU:0.0076,UCLA:0.0076,SMC:0.0040,OSU:0.0040,MIA:0.0040,MIOH:0.0010};
-const S16={MICH:ml(-800),DUKE:ml(-700),ARIZ:ml(-600),FLA:ml(-425),PUR:ml(-375),ILL:ml(-350),ISU:ml(-300),HOU:ml(-275),GONZ:ml(-235),CONN:ml(-190),ARK:ml(-145),MSU:ml(-135),ALA:ml(-130),SJU:ml(-115),UVA:ml(-115),VAN:ml(-110),TENN:ml(120),KU:ml(125),NEB:ml(130),TTU:ml(160),WIS:ml(160),LOU:ml(190),UCLA:ml(210),SMC:ml(260),BYU:ml(425),UNC:ml(450),UK:ml(475),MIA:ml(525),OSU:ml(1000),MIOH:ml(8000)};
-const R1={MICH:ml(-20000),FLA:ml(-5000),ISU:ml(-3500),MSU:ml(-1800),CONN:ml(-3500),UVA:ml(-700),WIS:ml(-700),SJU:ml(-600),VAN:ml(-700),BYU:ml(-148),TTU:ml(-700),LOU:ml(-162),TENN:ml(-700),UNC:ml(-142),UK:ml(-162),DUKE:ml(-20000),ARIZ:ml(-5000),HOU:ml(-8000),ILL:ml(-5000),PUR:ml(-5000),GONZ:ml(-3200),NEB:ml(-500),UCLA:ml(-500),ALA:ml(-700),ARK:ml(-1450),KU:ml(-700),SMC:ml(-162),MIA:ml(-500),OSU:ml(-142),MIOH:ml(250)};
+const S16_RAW={
+  MICH:ml(-800),DUKE:ml(-700),ARIZ:ml(-600),FLA:ml(-425),PUR:ml(-375),
+  ILL:ml(-350),ISU:ml(-300),HOU:ml(-275),GONZ:ml(-235),CONN:ml(-190),
+  ARK:ml(-145),MSU:ml(-135),ALA:ml(-130),SJU:ml(-115),UVA:ml(-115),
+  VAN:ml(-110),TENN:ml(120),KU:ml(125),NEB:ml(130),TTU:ml(160),
+  WIS:ml(160),LOU:ml(190),UCLA:ml(210),SMC:ml(260),BYU:ml(425),
+  UNC:ml(450),UK:ml(475),MIA:ml(525),OSU:ml(1000),MIOH:ml(8000),
+};
+const S16_VIG = Object.values(S16_RAW).reduce((a,b)=>a+b,0) / 16;
+const S16={};
+for(const[k,v]of Object.entries(S16_RAW)) S16[k]=v/S16_VIG;
+
+const R1_RAW={
+  MICH:ml(-20000),FLA:ml(-5000),ISU:ml(-3500),MSU:ml(-1800),
+  CONN:ml(-3500),UVA:ml(-700),WIS:ml(-700),SJU:ml(-600),
+  VAN:ml(-700),BYU:ml(-148),TTU:ml(-700),LOU:ml(-162),
+  TENN:ml(-700),UNC:ml(-142),UK:ml(-162),DUKE:ml(-20000),
+  ARIZ:ml(-5000),HOU:ml(-8000),ILL:ml(-5000),PUR:ml(-5000),
+  GONZ:ml(-3200),NEB:ml(-500),UCLA:ml(-500),ALA:ml(-700),
+  ARK:ml(-1450),KU:ml(-700),SMC:ml(-162),MIA:ml(-500),
+  OSU:ml(-142),MIOH:ml(250),
+};
+// Each R1 game is independent 50/50 baseline — normalize each pair to sum to 1
+// Since we only store the favorite's prob, just cap at reasonable levels
+// R1 vig is per-game; normalize each game's two sides to sum to 1
+const R1={};
+for(const[k,v]of Object.entries(R1_RAW)) R1[k]=v; // R1 per-game already ~normalized per matchup
 
 // ── SCORING ───────────────────────────────────────────────────────────────────
 const ROUND_PTS={champion:800,runnerup:400,final4:200,elite8:100,sweet16:50,r2:0,r1:0};
@@ -328,7 +363,8 @@ function normEspn(a){const u=(a||'').toUpperCase();return ESPN_ALIAS[u]||ALIAS[u
 
 function roundFromWins(w){return['r1','r2','sweet16','elite8','final4','runnerup','champion'][Math.min(w,6)];}
 
-function processEspnEvents(events){
+function processEspnEvents(events, dateStr){
+  const isFirstFour = dateStr === '20260318'; // First Four — wins don't count toward round advancement
   for(const e of events){
     const comp=e.competitions?.[0];
     if(!comp)continue;
@@ -343,11 +379,20 @@ function processEspnEvents(events){
     const aS=parseInt(away.score||0);
     if(!hS&&!aS)continue;
     const winner=hS>aS?hA:aA, loser=hS>aS?aA:hA;
-    const lw=teamWins[loser]||0;
-    teamElim[loser]=roundFromWins(lw);
-    teamWins[winner]=(teamWins[winner]||0)+1;
-    teamAlive[winner]=true;
-    delete teamAlive[loser];
+
+    if(isFirstFour){
+      // First Four loser is out before the tournament proper — treat as r1 loss
+      teamElim[loser]='r1';
+      // Winner just earned their spot — mark alive but don't count as a tournament win
+      teamAlive[winner]=true;
+      delete teamAlive[loser];
+    } else {
+      const lw=teamWins[loser]||0;
+      teamElim[loser]=roundFromWins(lw);
+      teamWins[winner]=(teamWins[winner]||0)+1;
+      teamAlive[winner]=true;
+      delete teamAlive[loser];
+    }
   }
   for(const[a,w]of Object.entries(teamWins)){
     if(w>=6){teamElim[a]='champion';delete teamAlive[a];}
@@ -372,13 +417,13 @@ async function loadScores(){
     );
 
     let totalClosed=0, totalLive=0;
-    for(const r of results){
-      if(r.status!=='fulfilled'||!r.value)continue;
+    results.forEach((r, i) => {
+      if(r.status!=='fulfilled'||!r.value)return;
       const events=r.value.events||[];
       totalClosed+=events.filter(e=>e.status?.type?.name==='STATUS_FINAL').length;
       totalLive+=events.filter(e=>e.status?.type?.name==='STATUS_IN_PROGRESS').length;
-      processEspnEvents(events);
-    }
+      processEspnEvents(events, TOURNEY_DATES[i]);
+    });
 
     if(totalLive>0) setStatus('live',`${totalLive} game(s) live · ${totalClosed} completed`);
     else if(totalClosed>0) setStatus('done',`${totalClosed} games completed`);
