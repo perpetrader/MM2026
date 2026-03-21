@@ -195,10 +195,31 @@ const R1={MICH:ml(-20000),FLA:ml(-5000),ISU:ml(-3500),MSU:ml(-1800),CONN:ml(-350
 
 // ── SCORING ───────────────────────────────────────────────────────────────────
 const ROUND_PTS={champion:800,runnerup:400,final4:200,elite8:100,sweet16:50,r2:0,r1:0};
-function pts(result,slot){
-  const m=slot>=11?2:1;let p=(ROUND_PTS[result]||0)*m;
+
+// Points guaranteed just by reaching a round (locked in regardless of future results)
+// A team in the Sweet 16 is guaranteed 50pts even before they play
+const GUARANTEED_PTS={0:0,1:0,2:50,3:100,4:200,5:400,6:800}; // wins -> guaranteed pts
+
+function guaranteedPts(slot, wins){
+  const m = slot >= 11 ? 2 : 1;
+  return (GUARANTEED_PTS[Math.min(wins,6)] || 0) * m;
+}
+
+function pts(result, slot){
+  const m=slot>=11?2:1;
+  let p=(ROUND_PTS[result]||0)*m;
   if(slot<=5){if(result==='r1')p-=50;if(result==='r2')p-=25;}
   return p;
+}
+
+// Actual points: for eliminated teams use final result; for alive teams show guaranteed minimum
+function actualPts(result, slot, abbr){
+  if(result==='alive'){
+    const wins = teamWins[abbr]||0;
+    return guaranteedPts(slot, wins);
+  }
+  if(result==='pending') return 0;
+  return pts(result, slot);
 }
 function projected(result,slot,abbr){
   if(result!=='alive'&&result!=='pending')return pts(result,slot);
@@ -277,7 +298,9 @@ function projected(result,slot,abbr){
     penalty = pLoseR2Given1Win * (-25);
   }
 
-  return Math.round(exp+penalty);
+  // Add guaranteed points already locked in as the floor
+  const guaranteed = guaranteedPts(slot, wins);
+  return Math.round(guaranteed + exp + penalty);
 }
 
 // ── RESULTS STATE ─────────────────────────────────────────────────────────────
@@ -384,7 +407,7 @@ function render(){
     if(i===10)rows+=`<div class="divider-row">Picks 11–15 · Double points ★</div>`;
     const kp=PICKS.ken[i],dp=PICKS.dan[i];
     const kr=getResult(kp.abbr),dr=getResult(dp.abbr);
-    const kpts=pts(kr,kp.slot),dpts=pts(dr,dp.slot);
+    const kpts=actualPts(kr,kp.slot,kp.abbr),dpts=actualPts(dr,dp.slot,dp.abbr);
     const kproj=projected(kr,kp.slot,kp.abbr),dproj=projected(dr,dp.slot,dp.abbr);
     kT+=kpts;dT+=dpts;kP+=kproj;dP+=dproj;
     const dc=kp.slot>=11?'dbl':'';
