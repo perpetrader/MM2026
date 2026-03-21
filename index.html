@@ -66,6 +66,7 @@
   .b-elite8{background:rgba(52,152,219,0.1);color:#7fb3d3;}
   .b-sweet16{background:rgba(52,152,219,0.08);color:#7fb3d3;}
   .b-r2{background:rgba(107,130,160,0.15);color:var(--gray);}
+  .b-elim-pos{background:rgba(107,130,160,0.15);color:var(--gray);}
   .b-r1{background:rgba(231,76,60,0.15);color:var(--red);}
   .b-alive{background:rgba(46,204,113,0.15);color:var(--green);}
   .b-pending{background:rgba(255,255,255,0.06);color:var(--gray);}
@@ -97,11 +98,13 @@
     <div class="player-name">Ken</div>
     <div class="actual-score" id="ken-actual">—</div>
     <div class="projected-score">Projected: <span id="ken-proj">—</span></div>
+    <div class="projected-score" style="margin-top:2px">Max possible: <span id="ken-max" style="color:var(--green);font-weight:500">—</span></div>
   </div>
   <div class="score-card" id="dan-card">
     <div class="player-name">Dan</div>
     <div class="actual-score" id="dan-actual">—</div>
     <div class="projected-score">Projected: <span id="dan-proj">—</span></div>
+    <div class="projected-score" style="margin-top:2px">Max possible: <span id="dan-max" style="color:var(--green);font-weight:500">—</span></div>
   </div>
 </div>
 
@@ -350,6 +353,118 @@ function getResult(abbr){
   return'pending';
 }
 
+// ── MAX POSSIBLE POINTS — bracket tree simulation ─────────────────────────────
+// The bracket structure never changes — only which teams are still alive.
+// We hardcode the full bracket as a binary tree, then simulate optimally.
+// Format: string = team abbr (leaf), array [L, R] = game between two subtrees.
+// '_X' = non-pick filler team that can beat our picks but we don't score for.
+
+// 2026 Bracket Tree (4 regions → 2 Final Four games → Championship)
+// F4 matchup: East winner vs South winner, West winner vs Midwest winner
+const BRACKET_TREE = [
+  // F4: East vs South
+  [
+    // EAST region
+    [
+      // E8 top: DUKE/TCU side vs SJU/KU side
+      [ ['DUKE','_TCU'], ['SJU','KU'] ],
+      // E8 bot: MSU side vs CONN/UCLA side
+      [ 'MSU', ['CONN','UCLA'] ]
+    ],
+    // SOUTH region
+    [
+      // E8 top: FLA/IOWA side vs UVA/TENN side
+      [ ['FLA','_IOWA'], ['UVA','TENN'] ],
+      // E8 bot: HOU/TXAM side vs ILL/VCU side
+      [ ['HOU','_TXAM'], ['ILL','_VCU'] ]
+    ]
+  ],
+  // F4: West vs Midwest
+  [
+    // WEST region
+    [
+      // E8 top: ARIZ/USU side vs ARK/HP side
+      [ ['ARIZ','_USU'], ['ARK','_HP'] ],
+      // E8 bot: PUR/MIA side vs GONZ/TEX side
+      [ ['PUR','MIA'], ['GONZ','_TEX'] ]
+    ],
+    // MIDWEST region
+    [
+      // E8 top: MICH vs NEB/VAN side
+      [ 'MICH', ['NEB','VAN'] ],
+      // E8 bot: ISU/UK side vs TTU/ALA side
+      [ ['ISU','UK'], ['TTU','ALA'] ]
+    ]
+  ]
+];
+
+// Depth at the root = 4 (S16 is next scoring round for teams with 1 win)
+// MICH/MSU already have 2 wins so they're deeper — the tree handles this
+// because their leaf is at a higher level
+const DEPTH_TO_LOSS_ROUND = {5:'runnerup', 4:'final4', 3:'elite8', 2:'sweet16', 1:'r2'};
+
+function computeBracketMax(node, picks, depth) {
+  if(typeof node === 'string'){
+    const abbr = node;
+    if(abbr.startsWith('_') || !picks[abbr]) return {pts:0, champPts:0, winner:abbr};
+    const result = getResult(abbr);
+    if(result !== 'alive' && result !== 'pending'){
+      return {pts: actualPts(result, picks[abbr].slot, abbr), champPts:0, winner: abbr, elim:true};
+    }
+    const m = picks[abbr].slot>=11?2:1;
+    return {pts: 800*m, champPts:800*m, winner:abbr, isPick:true};
+  }
+
+  const [left, right] = node;
+  const L = computeBracketMax(left,  picks, depth-1);
+  const R = computeBracketMax(right, picks, depth-1);
+
+  const lIsPick = picks[L.winner] && !L.winner.startsWith('_') && !L.elim;
+  const rIsPick = picks[R.winner] && !R.winner.startsWith('_') && !R.elim;
+  const lossRound = DEPTH_TO_LOSS_ROUND[depth] || 'sweet16';
+
+  if(lIsPick && rIsPick){
+    const lSlot = picks[L.winner].slot, lM = lSlot>=11?2:1;
+    const rSlot = picks[R.winner].slot, rM = rSlot>=11?2:1;
+    const loserPts = (ROUND_PTS[lossRound]||0);
+    // Include BOTH subtrees — only swap out the loser's champion contribution
+    // for their actual loser-round points
+    const optA = L.pts + (R.pts - R.champPts + loserPts*rM); // L wins
+    const optB = R.pts + (L.pts - L.champPts + loserPts*lM); // R wins
+    return optA >= optB
+      ? {pts:optA, champPts:L.champPts, winner:L.winner}
+      : {pts:optB, champPts:R.champPts, winner:R.winner};
+  } else if(lIsPick){
+    return {pts:L.pts+R.pts, champPts:L.champPts, winner:L.winner};
+  } else if(rIsPick){
+    return {pts:L.pts+R.pts, champPts:R.champPts, winner:R.winner};
+  } else {
+    return {pts:0, champPts:0, winner:L.winner};
+  }
+}
+
+function calcMaxPts(playerPicks){
+  // Convert array of {slot, abbr} to map
+  const pickMap = {};
+  for(const p of playerPicks) pickMap[p.abbr] = p;
+
+  // Get future max from bracket simulation
+  const {pts: futurePts} = computeBracketMax(BRACKET_TREE, pickMap, 5);
+
+  // Add locked points from already-eliminated picks
+  let lockedPts = 0;
+  for(const p of playerPicks){
+    const result = getResult(p.abbr);
+    if(result !== 'alive' && result !== 'pending'){
+      lockedPts += actualPts(result, p.slot, p.abbr);
+    }
+  }
+
+  return futurePts + lockedPts;
+}
+
+let upcomingMatchups = []; // kept for compatibility but no longer used for max calc
+
 // ── ESPN API — works from any real hosting (Vercel, GitHub Pages, etc.) ───────
 const TOURNEY_DATES = [
   '20260318','20260319','20260320','20260321',
@@ -364,7 +479,7 @@ function normEspn(a){const u=(a||'').toUpperCase();return ESPN_ALIAS[u]||ALIAS[u
 function roundFromWins(w){return['r1','r2','sweet16','elite8','final4','runnerup','champion'][Math.min(w,6)];}
 
 function processEspnEvents(events, dateStr){
-  const isFirstFour = dateStr === '20260318'; // First Four — wins don't count toward round advancement
+  const isFirstFour = dateStr === '20260318';
   for(const e of events){
     const comp=e.competitions?.[0];
     if(!comp)continue;
@@ -406,7 +521,7 @@ async function loadScores(){
   document.getElementById('btn-text').textContent='Loading…';
   setStatus('wait','Fetching scores…');
 
-  teamWins={};teamElim={};teamAlive={};
+  teamWins={};teamElim={};teamAlive={};upcomingMatchups=[];
 
   try{
     const results = await Promise.allSettled(
@@ -445,6 +560,22 @@ async function loadScores(){
 const LABELS={champion:'🏆 Champion',runnerup:'🥈 Runner-Up',final4:'Final Four',elite8:'Elite Eight',sweet16:'Sweet 16',r2:'Lost R2',r1:'Lost R1',alive:'✓ Alive',pending:'Pending'};
 const BCLS={champion:'b-champion',runnerup:'b-runnerup',final4:'b-final4',elite8:'b-elite8',sweet16:'b-sweet16',r2:'b-r2',r1:'b-r1',alive:'b-alive',pending:'b-pending'};
 
+const ELIMINATED = new Set(['r1','r2','sweet16','elite8','final4','runnerup','champion']);
+
+function badgeCls(result, pts){
+  if(!ELIMINATED.has(result)) return BCLS[result]; // alive/pending unchanged
+  if(result==='champion'||result==='runnerup'||result==='final4'||result==='elite8'||result==='sweet16') return BCLS[result]; // keep gold/blue for good results
+  // r1 or r2 — red badge if 0 or negative, gray badge if positive
+  return pts > 0 ? 'b-elim-pos' : 'b-r1';
+}
+
+function ptsCls(result, pts){
+  if(!ELIMINATED.has(result)) return pts>0?'pp':pts<0?'pn':'pz';
+  if(pts > 0) return 'pp';   // green
+  if(pts < 0) return 'pn';   // red
+  return 'pn';               // 0 and eliminated = red
+}
+
 function render(){
   let kT=0,dT=0,kP=0,dP=0,rows='';
   for(let i=0;i<15;i++){
@@ -461,21 +592,26 @@ function render(){
     rows+=`<div class="pick-row ${dc}">
       <span class="snum">${String(kp.slot).padStart(2,'0')}</span>
       <span class="tname">${kp.team}</span>
-      <span class="badge ${BCLS[kr]}">${LABELS[kr]}</span>
-      <span class="pts ${kpts>0?'pp':kpts<0?'pn':'pz'}">${kpts>=0?'+':''}${kpts}${kph}</span>
+      <span class="badge ${badgeCls(kr,kpts)}">${LABELS[kr]}</span>
+      <span class="pts ${ptsCls(kr,kpts)}">${kpts>=0?'+':''}${kpts}${kph}</span>
       <span class="tname">${dp.team}</span>
-      <span class="badge ${BCLS[dr]}">${LABELS[dr]}</span>
-      <span class="pts ${dpts>0?'pp':dpts<0?'pn':'pz'}">${dpts>=0?'+':''}${dpts}${dph}</span>
+      <span class="badge ${badgeCls(dr,dpts)}">${LABELS[dr]}</span>
+      <span class="pts ${ptsCls(dr,dpts)}">${dpts>=0?'+':''}${dpts}${dph}</span>
     </div>`;
   }
   document.getElementById('table-area').innerHTML=`<div class="pick-table">
     <div class="table-header"><span>#</span><span class="col-name">Ken</span><span>Result</span><span style="text-align:right">Pts</span><span class="col-name">Dan</span><span>Result</span><span style="text-align:right">Pts</span></div>
     ${rows}</div>`;
 
+  const kMax = calcMaxPts(PICKS.ken);
+  const dMax = calcMaxPts(PICKS.dan);
+
   document.getElementById('ken-actual').textContent=(kT>=0?'+':'')+kT;
   document.getElementById('dan-actual').textContent=(dT>=0?'+':'')+dT;
   document.getElementById('ken-proj').textContent='+'+kP;
   document.getElementById('dan-proj').textContent='+'+dP;
+  document.getElementById('ken-max').textContent='+'+kMax;
+  document.getElementById('dan-max').textContent='+'+dMax;
 
   ['ken','dan'].forEach(p=>{
     const c=document.getElementById(`${p}-card`);
@@ -486,8 +622,8 @@ function render(){
 
   const diff=Math.abs(kT-dT),projDiff=Math.abs(kP-dP),projLeader=kP>=dP?'Ken':'Dan';
   document.getElementById('banner').innerHTML=leader
-    ?`<div class="banner-inner"><div><span class="banner-lead">${leader==='ken'?'Ken':'Dan'} leads</span><span class="banner-diff">by +${diff} pts</span></div><div class="banner-proj">Proj: <span>${projLeader} +${projDiff} ahead</span><br><span style="opacity:0.7">Ken +${kP} · Dan +${dP}</span></div></div>`
-    :`<div class="banner-inner" style="justify-content:space-between"><span class="banner-lead" style="color:var(--cream)">Tied — 0 pts</span><div class="banner-proj">Proj: <span>${projLeader} +${projDiff} ahead</span><br><span style="opacity:0.7">Ken +${kP} · Dan +${dP}</span></div></div>`;
+    ?`<div class="banner-inner"><div><span class="banner-lead">${leader==='ken'?'Ken':'Dan'} leads</span><span class="banner-diff">by +${diff} pts</span></div><div class="banner-proj">Proj: <span>${projLeader} +${projDiff} ahead</span><br><span style="opacity:0.7">Ken +${kP} · Dan +${dP}</span><br><span style="color:var(--green)">Max: Ken +${kMax} · Dan +${dMax}</span></div></div>`
+    :`<div class="banner-inner" style="justify-content:space-between"><span class="banner-lead" style="color:var(--cream)">Tied — 0 pts</span><div class="banner-proj">Proj: <span>${projLeader} +${projDiff} ahead</span><br><span style="opacity:0.7">Ken +${kP} · Dan +${dP}</span><br><span style="color:var(--green)">Max: Ken +${kMax} · Dan +${dMax}</span></div></div>`;
 }
 
 function setStatus(type,msg){
