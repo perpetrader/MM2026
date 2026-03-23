@@ -193,12 +193,13 @@ const PICKS = {
 // ── ODDS — Updated for Sweet 16 (DraftKings, Mar 23 2026), normalized ────────
 // Championship odds — 16 remaining teams only, vig removed (raw overround 104.5%)
 const ODDS={
+  // Active S16 teams
   MICH:0.217495, ARIZ:0.212662, DUKE:0.182281, HOU:0.100735,
   PUR:0.056293,  ILL:0.053165,  ISU:0.030870,  MSU:0.030870,
   CONN:0.030870, ARK:0.026583,  SJU:0.018764,  NEB:0.015688,
   TENN:0.011815, TEX:0.004761,  ALA:0.004761,  IOWA:0.002386,
-  // Eliminated teams — keep small nonzero for any pending projection calls
-  DUKE:0.182281, FLA:0.001, GONZ:0.001, UK:0.001, TTU:0.001,
+  // Eliminated teams — small nonzero fallback
+  FLA:0.001, GONZ:0.001, UK:0.001, TTU:0.001,
   UVA:0.001, KU:0.001, UCLA:0.001, VAN:0.001, WIS:0.001,
   BYU:0.001, LOU:0.001, UNC:0.001, SMC:0.001, OSU:0.001, MIOH:0.001,
 };
