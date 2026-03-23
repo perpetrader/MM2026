@@ -190,46 +190,53 @@ const PICKS = {
   ]
 };
 
-// ── ODDS — DraftKings implied probabilities, normalized to remove vig ─────────
-// Raw implied probs summed to 126.3% — divided by 1.263 to normalize to 100%
+// ── ODDS — Updated for Sweet 16 (DraftKings, Mar 23 2026), normalized ────────
+// Championship odds — 16 remaining teams only, vig removed (raw overround 104.5%)
 const ODDS={
-  DUKE:0.1759,MICH:0.1685,ARIZ:0.1584,FLA:0.0931,HOU:0.0720,
-  CONN:0.0440,ILL:0.0344,ISU:0.0417,PUR:0.0220,MSU:0.0193,
-  KU:0.0155,ARK:0.0155,SJU:0.0155,GONZ:0.0142,UVA:0.0130,
-  VAN:0.0120,WIS:0.0112,TENN:0.0087,NEB:0.0078,UK:0.0078,
-  ALA:0.0078,UNC:0.0071,TTU:0.0071,LOU:0.0049,BYU:0.0060,
-  UCLA:0.0060,SMC:0.0032,OSU:0.0032,MIA:0.0032,MIOH:0.0008,
+  MICH:0.217495, ARIZ:0.212662, DUKE:0.182281, HOU:0.100735,
+  PUR:0.056293,  ILL:0.053165,  ISU:0.030870,  MSU:0.030870,
+  CONN:0.030870, ARK:0.026583,  SJU:0.018764,  NEB:0.015688,
+  TENN:0.011815, TEX:0.004761,  ALA:0.004761,  IOWA:0.002386,
+  // Eliminated teams — keep small nonzero for any pending projection calls
+  DUKE:0.182281, FLA:0.001, GONZ:0.001, UK:0.001, TTU:0.001,
+  UVA:0.001, KU:0.001, UCLA:0.001, VAN:0.001, WIS:0.001,
+  BYU:0.001, LOU:0.001, UNC:0.001, SMC:0.001, OSU:0.001, MIOH:0.001,
 };
 
-// S16 odds — normalized by dividing by overround (1502/1600 ≈ 0.939 overround factor)
-function ml(o){return o<0?(-o)/(-o+100):100/(o+100);}
-const S16_RAW={
-  MICH:ml(-800),DUKE:ml(-700),ARIZ:ml(-600),FLA:ml(-425),PUR:ml(-375),
-  ILL:ml(-350),ISU:ml(-300),HOU:ml(-275),GONZ:ml(-235),CONN:ml(-190),
-  ARK:ml(-145),MSU:ml(-135),ALA:ml(-130),SJU:ml(-115),UVA:ml(-115),
-  VAN:ml(-110),TENN:ml(120),KU:ml(125),NEB:ml(130),TTU:ml(160),
-  WIS:ml(160),LOU:ml(190),UCLA:ml(210),SMC:ml(260),BYU:ml(425),
-  UNC:ml(450),UK:ml(475),MIA:ml(525),OSU:ml(1000),MIOH:ml(8000),
+// S16 game win probabilities — derived from BetMGM spreads (σ=11), Mar 23 2026
+// normCDF(spread/11): spread = points the listed favorite is favored by
+function normCDF(z){
+  const a1=0.254829592,a2=-0.284496736,a3=1.421413741,a4=-1.453152027,a5=1.061405429,p=0.3275911;
+  const sign=z<0?-1:1; z=Math.abs(z)/Math.sqrt(2);
+  const t=1/(1+p*z);
+  const y=1-((((a5*t+a4)*t+a3)*t+a2)*t+a1)*t*Math.exp(-z*z);
+  return 0.5*(1+sign*y);
+}
+// S16 matchup win probs (favored team listed second, negative spread)
+// TEX vs PUR(-7.5), IOWA vs NEB(-2.5), ARK vs ARIZ(-8.5), ILL vs HOU(-2.5)
+// SJU vs DUKE(-6.5), ALA vs MICH(-10.5), MSU vs CONN(-1.5), TENN vs ISU(-4.5)
+const S16={
+  TEX:normCDF(-7.5/11),  PUR:normCDF(7.5/11),
+  IOWA:normCDF(-2.5/11), NEB:normCDF(2.5/11),
+  ARK:normCDF(-8.5/11),  ARIZ:normCDF(8.5/11),
+  ILL:normCDF(-2.5/11),  HOU:normCDF(2.5/11),
+  SJU:normCDF(-6.5/11),  DUKE:normCDF(6.5/11),
+  ALA:normCDF(-10.5/11), MICH:normCDF(10.5/11),
+  MSU:normCDF(-1.5/11),  CONN:normCDF(1.5/11),
+  TENN:normCDF(-4.5/11), ISU:normCDF(4.5/11),
 };
-const S16_VIG = Object.values(S16_RAW).reduce((a,b)=>a+b,0) / 16;
-const S16={};
-for(const[k,v]of Object.entries(S16_RAW)) S16[k]=v/S16_VIG;
 
-const R1_RAW={
-  MICH:ml(-20000),FLA:ml(-5000),ISU:ml(-3500),MSU:ml(-1800),
-  CONN:ml(-3500),UVA:ml(-700),WIS:ml(-700),SJU:ml(-600),
-  VAN:ml(-700),BYU:ml(-148),TTU:ml(-700),LOU:ml(-162),
-  TENN:ml(-700),UNC:ml(-142),UK:ml(-162),DUKE:ml(-20000),
-  ARIZ:ml(-5000),HOU:ml(-8000),ILL:ml(-5000),PUR:ml(-5000),
-  GONZ:ml(-3200),NEB:ml(-500),UCLA:ml(-500),ALA:ml(-700),
-  ARK:ml(-1450),KU:ml(-700),SMC:ml(-162),MIA:ml(-500),
-  OSU:ml(-142),MIOH:ml(250),
-};
-// Each R1 game is independent 50/50 baseline — normalize each pair to sum to 1
-// Since we only store the favorite's prob, just cap at reasonable levels
-// R1 vig is per-game; normalize each game's two sides to sum to 1
-const R1={};
-for(const[k,v]of Object.entries(R1_RAW)) R1[k]=v; // R1 per-game already ~normalized per matchup
+// Interpolated per-round conditional win probabilities (geometric between S16 and champ)
+// P(champ) = P(S16) * r^3  →  r = (P(champ)/P(S16))^(1/3)
+// Used for projection: P(reach E8) = P(S16)*r, P(reach F4) = P(S16)*r^2, etc.
+const ROUND_WIN={};
+for(const t of Object.keys(S16)){
+  const pc=ODDS[t]||0.001, ps=S16[t];
+  ROUND_WIN[t]=Math.pow(pc/ps, 1/3);
+}
+
+// Legacy R1 object — all teams have already won R1, kept for any edge cases
+const R1={}; for(const[k,v]of Object.entries(ODDS)) R1[k]=v;
 
 // ── SCORING ───────────────────────────────────────────────────────────────────
 const ROUND_PTS={champion:800,runnerup:400,final4:200,elite8:100,sweet16:50,r2:0,r1:0};
@@ -261,84 +268,39 @@ function actualPts(result, slot, abbr){
 }
 function projected(result,slot,abbr){
   if(result!=='alive'&&result!=='pending')return pts(result,slot);
-  const m=slot>=11?2:1,c=ODDS[abbr]||0.005;
+  const m=slot>=11?2:1;
+  const c=ODDS[abbr]||0.001;
   const wins=teamWins[abbr]||0;
 
-  // Use pre-tournament S16/R1 odds for teams that haven't played yet (pending)
-  // For teams already alive (won 1+ games), update to conditional probabilities:
-  // P(reach round X | already won N games) = P(reach X) / P(win N games)
-  // We anchor on the known sportsbook probabilities and scale forward.
+  // All remaining teams have 2+ wins (in S16).
+  // S16[abbr] = prob of winning S16 game (from spread).
+  // ROUND_WIN[abbr] = geometric per-round win prob for E8/F4/Final.
+  const pWinS16 = S16[abbr] || c;
+  const r = ROUND_WIN[abbr] || Math.pow(c/pWinS16, 1/3);
 
-  let pS16, pE8, pF4, pFinal, pChamp=c;
-  const pS16_pre = S16[abbr] ?? Math.pow(c,2/6);
-
-  if(wins===0){
-    // Pre-tournament: use raw sportsbook odds, no update needed
-    const pR1=R1[abbr]??Math.pow(c,1/6);
-    pS16=pS16_pre;
-    pE8=Math.sqrt(pS16*c);
-    pF4=Math.pow(c,4/6);
-    pFinal=Math.pow(c,5/6);
-    const exp=((pS16-pE8)*50+(pE8-pF4)*100+(pF4-pFinal)*200+(pFinal-c)*400+c*800)*m;
-    const penalty=slot<=5?(1-pR1)*(-50)+Math.max(0,pR1-pS16)*(-25):0;
-    return Math.round(exp+penalty);
+  let pS16,pE8,pF4,pFinal,pChamp=c;
+  if(wins===2){
+    pS16=pWinS16; pE8=pWinS16*r; pF4=pWinS16*r*r; pFinal=pWinS16*r*r*r; pChamp=c;
+  } else if(wins===3){
+    pS16=1; pE8=r; pF4=r*r; pFinal=r*r*r; pChamp=Math.min(c/pWinS16,1);
+  } else if(wins===4){
+    pS16=1; pE8=1; pF4=r; pFinal=r*r; pChamp=Math.min(c/(pWinS16*r),1);
+  } else if(wins===5){
+    pS16=1; pE8=1; pF4=1; pFinal=r; pChamp=Math.min(c/(pWinS16*r*r),1);
+  } else if(wins>=6){
+    pS16=1; pE8=1; pF4=1; pFinal=1; pChamp=1;
+  } else {
+    pS16=pWinS16; pE8=pWinS16*r; pF4=pWinS16*r*r; pFinal=pWinS16*r*r*r; pChamp=c;
   }
 
-  // Team has won games — update conditionally.
-  // P(reach round | survived to here) = P(reach round) / P(survived to here)
-  // "Survived to here" means won `wins` games already.
-  // We use the geometric model P(win k games) = c^(k/6) as the baseline,
-  // but anchor the S16 probability to the real sportsbook number.
-
-  // Map wins to the probability of having reached this point
-  // wins=1: survived R1. Use pR1_pre as anchor.
-  // wins=2: reached S16. Use pS16_pre as anchor.
-  // wins=3+: use geometric from champ odds
-
-  const pR1_pre = R1[abbr] ?? Math.pow(c,1/6);
-  let pSurvivedToHere;
-  if(wins===1) pSurvivedToHere = pR1_pre;
-  else if(wins===2) pSurvivedToHere = pS16_pre;
-  else pSurvivedToHere = Math.pow(c, wins/6);
-
-  // Conditional probabilities: divide future round probs by current survival prob
-  const pS16_raw = wins>=2 ? 1.0 : pS16_pre;  // already in S16 if wins>=2
-  const pE8_raw  = wins>=3 ? 1.0 : Math.sqrt(pS16_pre*c);
-  const pF4_raw  = wins>=4 ? 1.0 : Math.pow(c,4/6);
-  const pFinal_raw=wins>=5 ? 1.0 : Math.pow(c,5/6);
-
-  // Conditional = raw / pSurvivedToHere, capped at 1
-  pS16  = wins>=2 ? 1.0 : Math.min(pS16_raw/pSurvivedToHere, 1.0);
-  pE8   = wins>=3 ? 1.0 : Math.min(pE8_raw/pSurvivedToHere, 1.0);
-  pF4   = wins>=4 ? 1.0 : Math.min(pF4_raw/pSurvivedToHere, 1.0);
-  pFinal= wins>=5 ? 1.0 : Math.min(pFinal_raw/pSurvivedToHere, 1.0);
-  pChamp= Math.min(c/pSurvivedToHere, 1.0);
-
-  // Points already locked in from wins so far (no points for winning R1/R2, only for losing in later rounds)
-  // Expected future points from here
-  const futureS16  = wins<2 ? (pS16-pE8)*50   : 0; // can still lose in S16 if wins<2
-  const futureE8   = wins<3 ? (pE8-pF4)*100  : 0;
-  const futureF4   = wins<4 ? (pF4-pFinal)*200: 0;
+  const futureS16  = wins<2 ? (pS16-pE8)*50    : 0;
+  const futureE8   = wins<3 ? (pE8-pF4)*100    : 0;
+  const futureF4   = wins<4 ? (pF4-pFinal)*200  : 0;
   const futureFinal= wins<5 ? (pFinal-pChamp)*400: 0;
   const futureChamp= pChamp*800;
-
   const exp=(futureS16+futureE8+futureF4+futureFinal+futureChamp)*m;
-
-  // Penalty: only applies to picks 1-5, and only if they haven't cleared R2 yet
-  // If wins>=2 they've cleared R2, no more penalty risk
-  let penalty=0;
-  if(slot<=5&&wins===0){
-    penalty=(1-pR1_pre)*(-50)+Math.max(0,pR1_pre-pS16_pre)*(-25);
-  } else if(slot<=5&&wins===1){
-    // Survived R1, might still lose R2 — penalty for R2 loss already partially avoided
-    // Conditional P(lose R2 | won R1) = P(lose R2) / P(won R1) = (pR1-pS16)/pR1
-    const pLoseR2Given1Win = Math.max(0,(pR1_pre-pS16_pre)/pR1_pre);
-    penalty = pLoseR2Given1Win * (-25);
-  }
-
-  // Add guaranteed points already locked in as the floor
-  const guaranteed = guaranteedPts(slot, wins);
-  return Math.round(guaranteed + exp + penalty);
+  const guaranteed=guaranteedPts(slot,wins);
+  return Math.round(guaranteed+exp);
 }
 
 // ── RESULTS STATE ─────────────────────────────────────────────────────────────
@@ -373,8 +335,8 @@ const BRACKET_TREE = [
     ],
     // SOUTH region
     [
-      // E8 top: FLA/IOWA side vs TTU/ALA side
-      [ ['FLA','_IOWA'], ['TTU','ALA'] ],
+      // E8 top: FLA/IOWA side vs TTU/ALA side  (IOWA upset FLA)
+      [ ['IOWA','_FLA'], ['TTU','ALA'] ],
       // E8 bot: UVA/TENN side vs HOU/TXAM side
       [ ['UVA','TENN'], ['HOU','_TXAM'] ]
     ]
@@ -385,8 +347,8 @@ const BRACKET_TREE = [
     [
       // E8 top: ARIZ/USU side vs ARK/HP side
       [ ['ARIZ','_USU'], ['ARK','_HP'] ],
-      // E8 bot: PUR/MIA side vs GONZ/TEX side
-      [ ['PUR','MIA'], ['GONZ','_TEX'] ]
+      // E8 bot: PUR/MIA side vs TEX side  (TEX upset GONZ)
+      [ ['PUR','MIA'], ['TEX','_GONZ'] ]
     ],
     // MIDWEST region
     [
