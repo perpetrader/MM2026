@@ -294,10 +294,10 @@ function projected(result,slot,abbr){
     pS16=pWinS16; pE8=pWinS16*r; pF4=pWinS16*r*r; pFinal=pWinS16*r*r*r; pChamp=c;
   }
 
-  const futureS16  = wins<2 ? (pS16-pE8)*50    : 0;
-  const futureE8   = wins<3 ? (pE8-pF4)*100    : 0;
-  const futureF4   = wins<4 ? (pF4-pFinal)*200  : 0;
-  const futureFinal= wins<5 ? (pFinal-pChamp)*400: 0;
+  const futureS16  = wins<3 ? (pS16-pE8)*50    : 0;  // wins<3: can still lose in S16
+  const futureE8   = wins<4 ? (pE8-pF4)*100    : 0;
+  const futureF4   = wins<5 ? (pF4-pFinal)*200  : 0;
+  const futureFinal= wins<6 ? (pFinal-pChamp)*400: 0;
   const futureChamp= pChamp*800;
   const exp=(futureS16+futureE8+futureF4+futureFinal+futureChamp)*m;
   const guaranteed=guaranteedPts(slot,wins);
